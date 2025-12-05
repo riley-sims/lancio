@@ -1,0 +1,11 @@
+# Supabase Edge Functions
+# 
+# Deploy functions with:
+# supabase functions deploy <function-name>
+#
+# Example functions:
+# - create-drive
+# - join-drive
+# - send-notification
+# - handle-stripe-webhook
+

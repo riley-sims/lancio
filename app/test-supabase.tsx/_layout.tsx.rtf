@@ -1,0 +1,84 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2822
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 import \{ useEffect, useState \} from 'react';\
+import \{ View, Text, StyleSheet \} from 'react-native';\
+import \{ auth, db \} from '@/lib/supabase';\
+\
+export default function TestSupabase() \{\
+  const [status, setStatus] = useState('Testing...');\
+  const [error, setError] = useState<string | null>(null);\
+\
+  useEffect(() => \{\
+    testConnection();\
+  \}, []);\
+\
+  const testConnection = async () => \{\
+    try \{\
+      // Test 1: Check session\
+      const \{ data: sessionData, error: sessionError \} = await auth.getSession();\
+      if (sessionError) \{\
+        setStatus('\uc0\u10060  Session Error');\
+        setError(sessionError.message);\
+        return;\
+      \}\
+\
+      // Test 2: Try to query profiles table\
+      const \{ data: profilesData, error: profilesError \} = await db.getUserProfile('test-id');\
+      if (profilesError && profilesError.code !== 'PGRST116') \{ // PGRST116 = not found, which is OK\
+        setStatus('\uc0\u10060  Database Query Error');\
+        setError(profilesError.message);\
+        return;\
+      \}\
+\
+      // Test 3: Check if Supabase URL is set\
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;\
+      if (!supabaseUrl) \{\
+        setStatus('\uc0\u10060  Missing Environment Variable');\
+        setError('EXPO_PUBLIC_SUPABASE_URL is not set');\
+        return;\
+      \}\
+\
+      setStatus('\uc0\u9989  Supabase Connection Successful!');\
+      setError(null);\
+    \} catch (err: any) \{\
+      setStatus('\uc0\u10060  Connection Failed');\
+      setError(err.message);\
+    \}\
+  \};\
+\
+  return (\
+    <View style=\{styles.container\}>\
+      <Text style=\{styles.title\}>Supabase Connection Test</Text>\
+      <Text style=\{styles.status\}>\{status\}</Text>\
+      \{error && <Text style=\{styles.error\}>Error: \{error\}</Text>\}\
+    </View>\
+  );\
+\}\
+\
+const styles = StyleSheet.create(\{\
+  container: \{\
+    flex: 1,\
+    justifyContent: 'center',\
+    alignItems: 'center',\
+    padding: 20,\
+  \},\
+  title: \{\
+    fontSize: 20,\
+    fontWeight: 'bold',\
+    marginBottom: 20,\
+  \},\
+  status: \{\
+    fontSize: 16,\
+    marginBottom: 10,\
+  \},\
+  error: \{\
+    fontSize: 14,\
+    color: 'red',\
+    marginTop: 10,\
+  \},\
+\});}

@@ -1,0 +1,8 @@
+# Supabase Database Migrations
+#
+# Create migrations with:
+# supabase migration new <migration-name>
+#
+# Apply migrations with:
+# supabase db push
+

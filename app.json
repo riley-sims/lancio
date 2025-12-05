@@ -1,0 +1,63 @@
+{
+  "expo": {
+    "name": "new-rally",
+    "slug": "new-rally",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "newrally",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsDownloadToken": "pk.eyJ1IjoicmlsZXlzaW1zIiwiYSI6ImNtaTJwbnZpNjFubWMyam9xenR5MDBmMjYifQ.nMdhpKEVWxS1FowI4E82Qg"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#ffffff"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Rally to use your location for drive tracking and navigation."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "daa444e3-0f3a-4384-b214-0e5866299fde"
+      }
+    },
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
