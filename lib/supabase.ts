@@ -561,9 +561,34 @@ export const storage = {
       .from('avatars')
       .upload(path, file, {
         cacheControl: '3600',
-        upsert: false,
+        upsert: true,
       });
     return { data, error };
+  },
+
+  /** Pick image from device (file/content URI), upload to avatars bucket, return storage path. */
+  uploadAvatarFromUri: async (userId: string, uri: string): Promise<{ path?: string; error: any }> => {
+    try {
+      const { readAsStringAsync } = await import('expo-file-system/legacy');
+      const base64 = await readAsStringAsync(uri, { encoding: 'base64' });
+      const binary = atob(base64.trim());
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+      const path = `${userId}/avatar.jpg`;
+      const { data, error } = await supabase.storage
+        .from('avatars')
+        .upload(path, bytes.buffer, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: 'image/jpeg',
+        });
+
+      if (error) return { error };
+      return { path: data?.path, error: null };
+    } catch (e) {
+      return { error: e };
+    }
   },
   
   uploadDriveImage: async (driveId: string, file: Blob, filename?: string) => {

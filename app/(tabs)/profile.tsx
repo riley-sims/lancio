@@ -1,6 +1,7 @@
 import { Text } from '@/components/Themed';
 import { auth, db, friends, storage, supabase, vehicles as vehiclesHelper } from '@/lib/supabase';
 import { FontAwesome } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
@@ -23,6 +24,7 @@ export default function ProfileScreen() {
   });
   const [friendsCount, setFriendsCount] = useState(112);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -214,6 +216,55 @@ export default function ProfileScreen() {
     setIsEditing(false);
   };
 
+  const handleChangePhoto = () => {
+    if (!userId) {
+      Alert.alert('Error', 'Please sign in to update your profile picture.');
+      return;
+    }
+    Alert.alert('Profile picture', 'Choose an option', [
+      { text: 'Take Photo', onPress: () => pickImage('camera') },
+      { text: 'Choose from Library', onPress: () => pickImage('library') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const pickImage = async (source: 'camera' | 'library') => {
+    const opts = {
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1] as [number, number],
+      quality: 0.8,
+    };
+    const result =
+      source === 'camera'
+        ? await ImagePicker.launchCameraAsync(opts)
+        : await ImagePicker.launchImageLibraryAsync(opts);
+
+    if (result.canceled || !result.assets[0]?.uri) return;
+
+    setUploadingAvatar(true);
+    try {
+      const { path, error } = await storage.uploadAvatarFromUri(userId!, result.assets[0].uri);
+      if (error) {
+        console.error('Avatar upload error:', error);
+        Alert.alert('Upload failed', 'Could not update profile picture. Check that the avatars bucket exists and RLS allows uploads.');
+        return;
+      }
+      if (path) {
+        const { error: updateErr } = await db.updateUserProfile(userId!, { avatar_url: path });
+        if (updateErr) {
+          Alert.alert('Update failed', 'Picture uploaded but profile could not be updated.');
+          return;
+        }
+        await loadProfile();
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Failed to update profile picture.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const getAvatarUrl = () => {
     if (profile?.avatar_url) {
       return profile.avatar_url.startsWith('http')
@@ -242,13 +293,25 @@ export default function ProfileScreen() {
         {/* Profile Header */}
         <View style={[styles.profileHeader, { paddingTop: insets.top + 20 }]}>
           <View style={styles.avatarContainer}>
-            {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                <FontAwesome name="user" size={50} color="#fff" />
-              </View>
-            )}
+            <Pressable onPress={handleChangePhoto} disabled={uploadingAvatar} style={styles.avatarPressable}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                  <FontAwesome name="user" size={50} color="#fff" />
+                </View>
+              )}
+              {uploadingAvatar && (
+                <View style={styles.avatarOverlay}>
+                  <ActivityIndicator size="large" color="#fff" />
+                </View>
+              )}
+              {!uploadingAvatar && (
+                <View style={styles.avatarEditBadge}>
+                  <FontAwesome name="camera" size={14} color="#fff" />
+                </View>
+              )}
+            </Pressable>
           </View>
           
           <View style={[styles.headerActions, { top: insets.top + 20 }]}>
@@ -474,6 +537,9 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
   },
+  avatarPressable: {
+    position: 'relative',
+  },
   avatar: {
     width: 120,
     height: 120,
@@ -484,6 +550,30 @@ const styles = StyleSheet.create({
   },
   avatarPlaceholder: {
     backgroundColor: '#004225',
+  },
+  avatarOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#004225',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FAFAFA',
   },
   headerActions: {
     position: 'absolute',
