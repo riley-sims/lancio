@@ -1,11 +1,11 @@
-import { StyleSheet, View, ScrollView, ActivityIndicator, Pressable } from 'react-native';
 import { Text } from '@/components/Themed';
+import Calendar from '@/components/ui/Calendar';
+import { db } from '@/lib/supabase';
+import { formatDateTime } from '@/utils/helpers';
+import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { db } from '@/lib/supabase';
-import Calendar from '@/components/ui/Calendar';
-import { FontAwesome } from '@expo/vector-icons';
-import { formatDateTime } from '@/utils/helpers';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function ExploreScreen() {
   const router = useRouter();
@@ -110,7 +110,23 @@ export default function ExploreScreen() {
 
           {filteredDrives.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>No drives found</Text>
+              <FontAwesome name="road" size={48} color="#CCCCCC" />
+              <Text style={styles.emptyText}>
+                {selectedTab === 'events' 
+                  ? 'No upcoming events found' 
+                  : 'No community drives found'}
+              </Text>
+              <Text style={styles.emptySubtext}>
+                {selectedTab === 'events'
+                  ? 'Check back later or create your own drive!'
+                  : 'Try adjusting your filters or search for a different location'}
+              </Text>
+              <Pressable 
+                style={styles.emptyButton}
+                onPress={() => router.push('/drives/create')}
+              >
+                <Text style={styles.emptyButtonText}>Create a Drive</Text>
+              </Pressable>
             </View>
           ) : (
             filteredDrives.map((drive) => (
@@ -163,7 +179,7 @@ export default function ExploreScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FAFAFA',
   },
   header: {
     flexDirection: 'row',
@@ -172,7 +188,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FAFAFA',
   },
   headerTitle: {
     fontSize: 28,
@@ -180,7 +196,7 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   buildButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#004225',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
@@ -200,10 +216,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#E5E5E5',
+    backgroundColor: '#FAFAFA',
   },
   tabActive: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#000',
   },
   tabText: {
     fontSize: 14,
@@ -211,7 +227,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   tabTextActive: {
-    color: '#000',
+    color: '#fff',
     fontWeight: '600',
   },
   scrollView: {
@@ -281,9 +297,31 @@ const styles = StyleSheet.create({
   emptyState: {
     padding: 40,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontSize: 14,
     color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  emptyButton: {
+    backgroundColor: '#004225',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  emptyButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

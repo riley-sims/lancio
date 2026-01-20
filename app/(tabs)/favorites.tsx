@@ -1,6 +1,7 @@
 import DriveCard from '@/components/cards/DriveCard';
 import { Text } from '@/components/Themed';
 import { auth, db } from '@/lib/supabase';
+import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
@@ -39,7 +40,7 @@ export default function FavoritesScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#004225" />
       </View>
     );
   }
@@ -52,7 +53,11 @@ export default function FavoritesScreen() {
 
       {drives.length === 0 ? (
         <View style={styles.emptyState}>
+          <FontAwesome name="heart" size={48} color="#CCCCCC" />
           <Text style={styles.emptyText}>No favorite drives yet</Text>
+          <Text style={styles.emptySubtext}>
+            Favorite drives will appear here for quick access
+          </Text>
         </View>
       ) : (
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -77,13 +82,13 @@ export default function FavoritesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FAFAFA',
   },
   header: {
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 20,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FAFAFA',
   },
   headerTitle: {
     fontSize: 28,
@@ -103,8 +108,18 @@ const styles = StyleSheet.create({
     padding: 40,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontSize: 14,
     color: '#666',
+    textAlign: 'center',
+    maxWidth: 280,
   },
 });
 

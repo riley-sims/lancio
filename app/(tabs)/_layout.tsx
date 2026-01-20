@@ -18,7 +18,7 @@ function TabBarIcon(props: {
   
   return (
     <FontAwesome 
-      size={22} 
+      size={26} 
       name={iconName as any} 
       color={props.color}
     />
@@ -69,10 +69,11 @@ export default function TabLayout() {
           backgroundColor: '#F5F5F5',
           borderTopWidth: 0,
           height: 70,
-          paddingBottom: 8,
+          paddingBottom: 2,
           paddingTop: 8,
           elevation: 0,
           shadowOpacity: 0,
+          marginBottom: -8,
         },
         tabBarLabelStyle: {
           display: 'none',
@@ -135,9 +136,7 @@ export default function TabLayout() {
               {avatarUrl ? (
                 <Image source={{ uri: avatarUrl }} style={styles.profileIcon} />
               ) : (
-                <View style={[styles.profileIcon, styles.profileIconPlaceholder]}>
-                  <FontAwesome name="user" size={22} color={focused ? '#000' : '#666'} />
-                </View>
+                <FontAwesome name="user" size={26} color={focused ? '#000' : '#666'} />
               )}
             </View>
           ),
@@ -166,13 +165,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   profileIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-  },
-  profileIconPlaceholder: {
-    backgroundColor: '#E0E0E0',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
 });

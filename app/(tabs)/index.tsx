@@ -1,22 +1,155 @@
-import { StyleSheet, View, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
-import { Text } from '@/components/Themed';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import LocationSearchInput from '@/components/maps/LocationSearchInput';
 import MapView from '@/components/maps/MapView';
+import { Text } from '@/components/Themed';
+import { LocationSuggestion } from '@/lib/locationSearch';
+import { mapHelpers } from '@/lib/mapbox';
 import { FontAwesome } from '@expo/vector-icons';
+import * as Location from 'expo-location';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [destination, setDestination] = useState('');
+  const [destinationLocation, setDestinationLocation] = useState<LocationSuggestion | null>(null);
   const [stopA, setStopA] = useState('');
+  const [stopALocation, setStopALocation] = useState<LocationSuggestion | null>(null);
   const [driveStyle, setDriveStyle] = useState("Let's have fun");
   const [friends, setFriends] = useState('');
+  const [mapMarkers, setMapMarkers] = useState<Array<{ id: string; coordinates: [number, number]; title?: string }>>([]);
+  const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
+  const [mapCenter, setMapCenter] = useState<[number, number]>([-122.4194, 37.7749]); // San Francisco
+  const [mapZoom, setMapZoom] = useState(12);
+  const [loadingLocation, setLoadingLocation] = useState(false);
+  const [route, setRoute] = useState<Array<[number, number]>>([]);
+  const [loadingRoute, setLoadingRoute] = useState(false);
 
-  const handleSearch = () => {
-    // Navigate to drives/events screen or create drive
-    router.push('/drives/create');
+  // Get user's current location
+  const getCurrentLocation = useCallback(async () => {
+    setLoadingLocation(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Location permission denied');
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      const coords: [number, number] = [location.coords.longitude, location.coords.latitude];
+      setCurrentLocation(coords);
+      setMapCenter(coords);
+      setMapZoom(14);
+      
+      // Update markers to include current location
+      setMapMarkers(prev => {
+        const newMarkers: Array<{ id: string; coordinates: [number, number]; title: string }> = [{ id: 'current', coordinates: coords, title: 'Current Location' }];
+        // Keep existing markers but replace current if it exists
+        prev.forEach(marker => {
+          if (marker.id !== 'current' && marker.title) {
+            newMarkers.push({ id: marker.id, coordinates: marker.coordinates, title: marker.title });
+          }
+        });
+        return newMarkers;
+      });
+    } catch (error) {
+      console.error('Error getting location:', error);
+    } finally {
+      setLoadingLocation(false);
+    }
+  }, []);
+
+  // Get current location on mount
+  useEffect(() => {
+    getCurrentLocation();
+  }, [getCurrentLocation]);
+
+  // Fetch route when locations change
+  useEffect(() => {
+    const fetchRoute = async () => {
+      if (!destinationLocation) {
+        setRoute([]);
+        return;
+      }
+
+      setLoadingRoute(true);
+      try {
+        const start = currentLocation || mapCenter;
+        const end = destinationLocation.center;
+        const waypoints = stopALocation ? [stopALocation.center] : undefined;
+        
+        const routeData = await mapHelpers.getRoute(start, end, waypoints, 'driving');
+        setRoute(routeData.coordinates);
+      } catch (error) {
+        console.error('Error fetching route:', error);
+        setRoute([]);
+      } finally {
+        setLoadingRoute(false);
+      }
+    };
+
+    fetchRoute();
+  }, [currentLocation, destinationLocation, stopALocation, mapCenter]);
+
+  // Handle destination selection
+  const handleDestinationSelect = useCallback((location: LocationSuggestion) => {
+    setDestinationLocation(location);
+    setMapCenter(location.center);
+    setMapZoom(14);
+    
+    // Update markers
+    const newMarkers = [];
+    if (currentLocation) {
+      newMarkers.push({ id: 'current', coordinates: currentLocation, title: 'Current Location' });
+    }
+    newMarkers.push({ id: 'destination', coordinates: location.center, title: location.name });
+    if (stopALocation) {
+      newMarkers.push({ id: 'stopA', coordinates: stopALocation.center, title: stopALocation.name });
+    }
+    setMapMarkers(newMarkers);
+  }, [stopALocation, currentLocation]);
+
+  // Handle stop selection
+  const handleStopASelect = useCallback((location: LocationSuggestion) => {
+    setStopALocation(location);
+    
+    // Update markers
+    const newMarkers = [];
+    if (currentLocation) {
+      newMarkers.push({ id: 'current', coordinates: currentLocation, title: 'Current Location' });
+    }
+    if (destinationLocation) {
+      newMarkers.push({ id: 'destination', coordinates: destinationLocation.center, title: destinationLocation.name });
+    }
+    newMarkers.push({ id: 'stopA', coordinates: location.center, title: location.name });
+    setMapMarkers(newMarkers);
+  }, [destinationLocation, currentLocation]);
+
+  // Handle creating a drive
+  const handleCreateDrive = () => {
+    if (!destinationLocation) {
+      // If no destination, navigate to create drive page
+      router.push('/drives/create');
+      return;
+    }
+    
+    // Navigate to create drive with location data
+    router.push({
+      pathname: '/drives/create',
+      params: {
+        destination: destination,
+        destinationCoords: JSON.stringify(destinationLocation.center),
+        stopA: stopA || undefined,
+        stopACoords: stopALocation ? JSON.stringify(stopALocation.center) : undefined,
+      },
+    });
+  };
+
+  const handleMapPress = (coordinates: [number, number]) => {
+    // Optionally handle map taps
+    console.log('Map pressed at:', coordinates);
   };
 
   return (
@@ -24,52 +157,79 @@ export default function HomeScreen() {
       {/* Map Section - Full Screen */}
       <View style={styles.mapContainer}>
         <MapView 
-          initialCenter={[-122.4194, 37.7749]} // San Francisco
-          initialZoom={12}
+          key={`${mapCenter[0]}-${mapCenter[1]}-${mapZoom}`}
+          initialCenter={mapCenter}
+          initialZoom={mapZoom}
+          markers={mapMarkers}
+          route={route}
+          onMapPress={handleMapPress}
         />
+        
+        {/* Map Controls */}
+        <View style={[styles.mapControls, { top: insets.top + 10 }]}>
+          <Pressable 
+            style={styles.mapControlButton}
+            onPress={getCurrentLocation}
+            disabled={loadingLocation}
+          >
+            {loadingLocation ? (
+              <ActivityIndicator size="small" color="#000" />
+            ) : (
+              <FontAwesome name="location-arrow" size={18} color="#000" />
+            )}
+          </Pressable>
+        </View>
+        
+        {/* Route Loading Indicator */}
+        {loadingRoute && (
+          <View style={[styles.loadingOverlay, { top: insets.top + 60 }]}>
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#007AFF" />
+              <Text style={styles.loadingText}>Calculating route...</Text>
+            </View>
+          </View>
+        )}
       </View>
 
       {/* Bottom Sheet Overlay */}
       <KeyboardAvoidingView 
-        style={[styles.bottomSheetContainer, { bottom: 60 + insets.bottom }]}
+        style={[styles.bottomSheetContainer, { bottom: 0 }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={0}
       >
-        <View style={styles.bottomSheet}>
+        <ScrollView 
+          style={styles.bottomSheet}
+          contentContainerStyle={styles.bottomSheetContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Drag Handle */}
           <View style={styles.dragHandle} />
 
           {/* Where do you want to go? */}
           <View style={styles.inputSection}>
-            <View style={styles.searchInputContainer}>
-              <FontAwesome name="search" size={16} color="#666" style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Where do you want to go?"
-                placeholderTextColor="#999"
-                value={destination}
-                onChangeText={setDestination}
-                onFocus={handleSearch}
-              />
-            </View>
+            <LocationSearchInput
+              placeholder="Where do you want to go?"
+              value={destination}
+              onChangeText={setDestination}
+              onLocationSelect={handleDestinationSelect}
+              style={styles.searchInput}
+            />
           </View>
 
           {/* Any stops? */}
           <View style={styles.inputSection}>
             <Text style={styles.label}>Any stops?</Text>
-            <View style={styles.inputRow}>
-              <View style={styles.searchInputContainer}>
-                <FontAwesome name="search" size={16} color="#666" style={styles.searchIcon} />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Stop A"
-                  placeholderTextColor="#999"
-                  value={stopA}
-                  onChangeText={setStopA}
-                />
-              </View>
-              <Pressable style={styles.addButton}>
-                <FontAwesome name="plus" size={16} color="#000" />
+            <View style={styles.stopInputRow}>
+              <LocationSearchInput
+                placeholder="Stop A"
+                value={stopA}
+                onChangeText={setStopA}
+                onLocationSelect={handleStopASelect}
+                style={styles.stopInput}
+              />
+              <Pressable style={styles.addStopButton}>
+                <FontAwesome name="plus" size={16} color="#fff" />
               </Pressable>
             </View>
           </View>
@@ -86,23 +246,27 @@ export default function HomeScreen() {
           {/* Who's coming? */}
           <View style={styles.inputSection}>
             <Text style={styles.label}>Who's coming?</Text>
-            <View style={styles.inputRow}>
-              <View style={styles.searchInputContainer}>
-                <FontAwesome name="users" size={16} color="#666" style={styles.searchIcon} />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Add friends..."
-                  placeholderTextColor="#999"
-                  value={friends}
-                  onChangeText={setFriends}
-                />
-              </View>
-              <Pressable style={styles.addButton}>
-                <FontAwesome name="plus" size={16} color="#000" />
-              </Pressable>
-            </View>
+            <Pressable style={styles.dropdownButton}>
+              <FontAwesome name="users" size={16} color="#666" style={styles.dropdownIcon} />
+              <Text style={styles.dropdownText}>Add friends...</Text>
+              <FontAwesome name="chevron-down" size={14} color="#666" />
+            </Pressable>
           </View>
-        </View>
+
+          {/* Create Drive Button */}
+          <Pressable 
+            style={[styles.createButton, !destinationLocation && styles.createButtonDisabled]}
+            onPress={handleCreateDrive}
+            disabled={!destinationLocation}
+          >
+            <Text style={styles.createButtonText}>
+              {destinationLocation ? 'Continue to Create Drive' : 'Select a Destination'}
+            </Text>
+            {destinationLocation && (
+              <FontAwesome name="arrow-right" size={16} color="#fff" style={styles.createButtonIcon} />
+            )}
+          </Pressable>
+        </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );
@@ -116,23 +280,44 @@ const styles = StyleSheet.create({
   mapContainer: {
     ...StyleSheet.absoluteFillObject,
   },
+  mapControls: {
+    position: 'absolute',
+    right: 16,
+    zIndex: 5,
+  },
+  mapControlButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
   bottomSheetContainer: {
     position: 'absolute',
     left: 0,
     right: 0,
+    maxHeight: '60%',
   },
   bottomSheet: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FAFAFA',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 10,
+  },
+  bottomSheetContent: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 80, // Extra padding to account for tab bar and ensure content is visible
   },
   dragHandle: {
     width: 40,
@@ -151,6 +336,26 @@ const styles = StyleSheet.create({
     color: '#000',
     marginBottom: 8,
   },
+  searchInput: {
+    marginBottom: 0,
+  },
+  stopInput: {
+    marginBottom: 0,
+    flex: 1,
+  },
+  stopInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  addStopButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#004225',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -161,11 +366,6 @@ const styles = StyleSheet.create({
   },
   searchIcon: {
     marginRight: 12,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#000',
   },
   inputRow: {
     flexDirection: 'row',
@@ -189,8 +389,58 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 50,
   },
+  dropdownIcon: {
+    marginRight: 12,
+  },
   dropdownText: {
+    flex: 1,
     fontSize: 16,
     color: '#000',
+  },
+  createButton: {
+    backgroundColor: '#004225',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  createButtonDisabled: {
+    backgroundColor: '#E0E0E0',
+  },
+  createButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginRight: 8,
+  },
+  createButtonIcon: {
+    marginLeft: 4,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    zIndex: 6,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  loadingText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '500',
   },
 });

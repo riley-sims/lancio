@@ -1,9 +1,8 @@
-import { StyleSheet, View, ScrollView, Pressable, TextInput } from 'react-native';
 import { Text } from '@/components/Themed';
+import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { FontAwesome } from '@expo/vector-icons';
-import DriveCard from '@/components/cards/DriveCard';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 export default function DrivesScreen() {
   const router = useRouter();
@@ -138,34 +137,50 @@ export default function DrivesScreen() {
               ? 'Upcoming Events'
               : `All Community Drives`}
           </Text>
-          {(activeTab === 'upcoming' ? upcomingEvents : communityDrives).map((event) => (
-            <Pressable
-              key={event.id}
-              onPress={() => router.push(`/drives/${event.id}/lobby`)}
-            >
-              <View style={styles.eventCard}>
-                <View style={styles.eventHeader}>
-                  <Text style={styles.eventDate}>{event.date}</Text>
-                  <Text style={styles.eventTime}>{event.time}</Text>
+          {(activeTab === 'upcoming' ? upcomingEvents : communityDrives).length === 0 ? (
+            <View style={styles.emptyState}>
+              <FontAwesome name="calendar" size={48} color="#CCCCCC" />
+              <Text style={styles.emptyText}>
+                {activeTab === 'upcoming' 
+                  ? 'No upcoming events yet' 
+                  : 'No community drives found'}
+              </Text>
+              <Text style={styles.emptySubtext}>
+                {activeTab === 'upcoming'
+                  ? 'Start by creating your first drive!'
+                  : 'Try adjusting your search filters'}
+              </Text>
+            </View>
+          ) : (
+            (activeTab === 'upcoming' ? upcomingEvents : communityDrives).map((event) => (
+              <Pressable
+                key={event.id}
+                onPress={() => router.push(`/drives/${event.id}/lobby`)}
+              >
+                <View style={styles.eventCard}>
+                  <View style={styles.eventHeader}>
+                    <Text style={styles.eventDate}>{event.date}</Text>
+                    <Text style={styles.eventTime}>{event.time}</Text>
+                  </View>
+                  <Text style={styles.eventTitle}>{event.title}</Text>
+                  <Text style={styles.eventRoute}>
+                    {event.startLocation} to {event.endLocation}
+                  </Text>
+                  <View style={styles.eventDetails}>
+                    <Text style={styles.eventDetail}>{event.stops} stops</Text>
+                    <Text style={styles.eventDetail}>{event.duration}</Text>
+                    <Text style={styles.eventDetail}>{event.distance}</Text>
+                  </View>
+                  <View style={styles.eventIcons}>
+                    <FontAwesome name="home" size={16} color="#666" />
+                    <FontAwesome name="map" size={16} color="#666" />
+                    <FontAwesome name="heart" size={16} color="#666" />
+                    <FontAwesome name="user" size={16} color="#666" />
+                  </View>
                 </View>
-                <Text style={styles.eventTitle}>{event.title}</Text>
-                <Text style={styles.eventRoute}>
-                  {event.startLocation} to {event.endLocation}
-                </Text>
-                <View style={styles.eventDetails}>
-                  <Text style={styles.eventDetail}>{event.stops} stops</Text>
-                  <Text style={styles.eventDetail}>{event.duration}</Text>
-                  <Text style={styles.eventDetail}>{event.distance}</Text>
-                </View>
-                <View style={styles.eventIcons}>
-                  <FontAwesome name="home" size={16} color="#666" />
-                  <FontAwesome name="map" size={16} color="#666" />
-                  <FontAwesome name="heart" size={16} color="#666" />
-                  <FontAwesome name="user" size={16} color="#666" />
-                </View>
-              </View>
-            </Pressable>
-          ))}
+              </Pressable>
+            ))
+          )}
         </View>
       </ScrollView>
     </View>
@@ -175,7 +190,7 @@ export default function DrivesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FAFAFA',
   },
   header: {
     flexDirection: 'row',
@@ -184,7 +199,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FAFAFA',
   },
   headerTitle: {
     fontSize: 28,
@@ -192,7 +207,7 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   buildButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#004225',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -212,10 +227,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#fff',
+    backgroundColor: '#FAFAFA',
   },
   tabActive: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#000',
   },
   tabText: {
     fontSize: 14,
@@ -274,7 +289,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   calendarDayActive: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#004225',
   },
   calendarDayText: {
     fontSize: 14,
@@ -344,5 +359,22 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
   },
 });

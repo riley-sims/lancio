@@ -1,22 +1,58 @@
-import { StyleSheet, View, ScrollView, ActivityIndicator, Image, Pressable } from 'react-native';
 import { Text } from '@/components/Themed';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { auth, db, storage } from '@/lib/supabase';
+import { auth, db, friends, storage, supabase, vehicles as vehiclesHelper } from '@/lib/supabase';
 import { FontAwesome } from '@expo/vector-icons';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState<any>(null);
   const [stats, setStats] = useState<any>(null);
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [recentDrives, setRecentDrives] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState({
+    full_name: '',
+    username: '',
+    location: '',
+  });
+  const [friendsCount, setFriendsCount] = useState(112);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     loadProfile();
   }, []);
+
+  // Load vehicles function (can be called independently)
+  const loadVehicles = async (targetUserId?: string) => {
+    const userIdToUse = targetUserId || userId;
+    if (!userIdToUse) return;
+
+    try {
+      const { data: vehiclesData } = await vehiclesHelper.getVehicles(userIdToUse);
+      if (vehiclesData && vehiclesData.length > 0) {
+        setVehicles(vehiclesData);
+      } else {
+        setVehicles([]);
+      }
+    } catch (error) {
+      console.error('Error loading vehicles:', error);
+    }
+  };
+
+  // Reload vehicles when screen comes into focus (e.g., after adding a vehicle)
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) {
+        loadVehicles();
+      }
+    }, [userId])
+  );
 
   const loadProfile = async () => {
     try {
@@ -30,6 +66,11 @@ export default function ProfileScreen() {
           console.error('Error loading profile:', profileError);
         } else {
           setProfile(profileData);
+          setEditData({
+            full_name: profileData?.full_name || profileData?.username || 'John Doe',
+            username: profileData?.username || 'johndoe',
+            location: profileData?.location || 'San Francisco, CA',
+          });
         }
         
         // Load stats
@@ -49,21 +90,128 @@ export default function ProfileScreen() {
           });
         }
 
-        // Load vehicles (mock for now)
-        setVehicles([
-          { id: '1', make: 'Make', model: 'Model', subModel: 'Sub-Model', year: '0000', color: 'Color Name' },
-          { id: '2', make: 'Make', model: 'Model', subModel: 'Sub-Model', year: '0000', color: 'Color Name' },
-        ]);
+        // Load vehicles
+        await loadVehicles(user.id);
 
         // Load recent drives
         const { data: drivesData } = await db.getUserDrives(user.id);
         setRecentDrives((drivesData || []).slice(0, 3));
+
+        // Load friends count
+        const { data: friendsData } = await friends.getFriends(user.id);
+        if (friendsData) {
+          setFriendsCount(friendsData.length);
+        }
       }
     } catch (error) {
       console.error('Error:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSave = async () => {
+    // Validate inputs
+    if (!editData.full_name || editData.full_name.trim() === '') {
+      Alert.alert('Validation Error', 'Please enter your full name');
+      return;
+    }
+
+    if (!editData.username || editData.username.trim() === '') {
+      Alert.alert('Validation Error', 'Please enter a username');
+      return;
+    }
+
+    // Remove @ symbol if user added it
+    const cleanUsername = editData.username.replace('@', '').trim();
+    if (cleanUsername === '') {
+      Alert.alert('Validation Error', 'Please enter a valid username');
+      return;
+    }
+
+    setSaving(true);
+    
+    try {
+      // Get current user - try to use existing userId or fetch fresh
+      let currentUserId = userId;
+      if (!currentUserId) {
+        const { data: { user }, error: userError } = await auth.getCurrentUser();
+        if (userError || !user) {
+          Alert.alert('Error', 'Please log in to save your profile');
+          setSaving(false);
+          return;
+        }
+        currentUserId = user.id;
+        setUserId(user.id);
+      }
+      
+      // First check if profile exists
+      const { data: existingProfile } = await db.getUserProfile(currentUserId);
+      
+      const updates = {
+        full_name: editData.full_name.trim(),
+        username: cleanUsername,
+        location: editData.location.trim() || null,
+      };
+
+      let result;
+      if (existingProfile) {
+        // Update existing profile
+        result = await db.updateUserProfile(currentUserId, updates);
+      } else {
+        // Create new profile if it doesn't exist
+        const { data, error } = await supabase
+          .from('profiles')
+          .insert([{
+            id: currentUserId,
+            ...updates,
+          }])
+          .select()
+          .single();
+        result = { data, error };
+      }
+
+      const { data, error } = result;
+
+      if (error) {
+        console.error('Profile update error:', error);
+        let errorMessage = 'Failed to update profile';
+        
+        // Provide more specific error messages
+        if (error.code === '23505') {
+          errorMessage = 'Username already taken. Please choose another.';
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+        
+        Alert.alert('Error', errorMessage);
+      } else {
+        setProfile(data);
+        setEditData({
+          full_name: data?.full_name || '',
+          username: data?.username || '',
+          location: data?.location || '',
+        });
+        setIsEditing(false);
+        // Reload profile to get fresh data
+        await loadProfile();
+        Alert.alert('Success', 'Profile updated successfully');
+      }
+    } catch (error: any) {
+      console.error('Error saving profile:', error);
+      Alert.alert('Error', error?.message || 'Failed to update profile. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setEditData({
+      full_name: profile?.full_name || profile?.username || 'John Doe',
+      username: profile?.username || 'johndoe',
+      location: profile?.location || 'San Francisco, CA',
+    });
+    setIsEditing(false);
   };
 
   const getAvatarUrl = () => {
@@ -78,174 +226,278 @@ export default function ProfileScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#004225" />
       </View>
     );
   }
 
   const avatarUrl = getAvatarUrl();
-  const displayName = profile?.full_name || profile?.username || 'John Doe';
-  const username = profile?.username || 'johndoe';
-  const location = profile?.location || 'San Francisco, CA';
+  const displayName = isEditing ? editData.full_name : (profile?.full_name || profile?.username || 'John Doe');
+  const username = isEditing ? editData.username : (profile?.username || 'johndoe');
+  const location = isEditing ? editData.location : (profile?.location || 'San Francisco, CA');
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Profile Header */}
-      <View style={styles.profileHeader}>
-        <View style={styles.avatarContainer}>
-          {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+    <View style={styles.container}>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Profile Header */}
+        <View style={[styles.profileHeader, { paddingTop: insets.top + 20 }]}>
+          <View style={styles.avatarContainer}>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                <FontAwesome name="user" size={50} color="#fff" />
+              </View>
+            )}
+          </View>
+          
+          <View style={[styles.headerActions, { top: insets.top + 20 }]}>
+            <Pressable 
+              style={styles.actionButton}
+              onPress={() => setIsEditing(!isEditing)}
+            >
+              <FontAwesome name={isEditing ? "times" : "cog"} size={20} color="#000" />
+            </Pressable>
+            <Pressable style={styles.actionButton}>
+              <FontAwesome name="share" size={20} color="#000" />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* User Info */}
+        <View style={styles.userInfo}>
+          {isEditing ? (
+            <>
+              <TextInput
+                style={styles.editInput}
+                value={editData.full_name}
+                onChangeText={(text) => setEditData({ ...editData, full_name: text })}
+                placeholder="Full Name"
+              />
+              <TextInput
+                style={styles.editInput}
+                value={editData.username}
+                onChangeText={(text) => {
+                  // Remove @ if user types it
+                  const cleanText = text.replace('@', '').trim();
+                  setEditData({ ...editData, username: cleanText });
+                }}
+                placeholder="Username (without @)"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TextInput
+                style={styles.editInput}
+                value={editData.location}
+                onChangeText={(text) => setEditData({ ...editData, location: text })}
+                placeholder="Location"
+              />
+              <View style={styles.editActions}>
+                <Pressable 
+                  style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
+                  onPress={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Save</Text>
+                  )}
+                </Pressable>
+                <Pressable 
+                  style={styles.cancelButton} 
+                  onPress={handleCancel}
+                  disabled={saving}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </Pressable>
+              </View>
+            </>
           ) : (
-            <View style={[styles.avatar, styles.avatarPlaceholder]}>
-              <FontAwesome name="user" size={40} color="#666" />
+            <>
+              <Text style={styles.name}>{displayName}</Text>
+              <Text style={styles.username}>@{username}</Text>
+              <View style={styles.locationRow}>
+                <Text style={styles.location}>{location}</Text>
+                <View style={styles.friendsCount}>
+                  <FontAwesome name="users" size={14} color="#000" />
+                  <Text style={styles.friendsCountText}>{friendsCount}</Text>
+                </View>
+              </View>
+              
+              {/* Social Icons */}
+              <View style={styles.socialIcons}>
+                <Pressable style={styles.socialIcon}>
+                  <FontAwesome name="camera" size={18} color="#666" />
+                </Pressable>
+                <Pressable style={styles.socialIcon}>
+                  <FontAwesome name="play" size={18} color="#666" />
+                </Pressable>
+                <Pressable style={styles.socialIcon}>
+                  <FontAwesome name="comment" size={18} color="#666" />
+                </Pressable>
+                <Pressable style={styles.socialIcon}>
+                  <FontAwesome name="users" size={18} color="#666" />
+                </Pressable>
+              </View>
+            </>
+          )}
+        </View>
+
+        {/* Drive Stats */}
+        <View style={styles.statsSection}>
+          <Text style={styles.sectionTitle}>Drive Stats</Text>
+          <View style={styles.statsGrid}>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>
+                {stats?.total_miles ? stats.total_miles.toLocaleString().padStart(6, '0').replace(/(\d{2})(\d{3})/, '$1,$2') : '00,000'}
+              </Text>
+              <Text style={styles.statLabel}>Total Miles</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>
+                {stats?.drives_led ? stats.drives_led.toString().padStart(2, '0') : '00'}
+              </Text>
+              <Text style={styles.statLabel}>Drives Led</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>
+                {stats?.events_joined ? stats.events_joined.toString().padStart(2, '0') : '00'}
+              </Text>
+              <Text style={styles.statLabel}>Events Joined</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>#000</Text>
+              <Text style={styles.statLabel}>Lancio Ranking</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* My Garage */}
+        <View style={styles.garageSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>My Garage ({vehicles.length})</Text>
+            <Pressable 
+              style={styles.addButton}
+              onPress={() => router.push('/profile/vehicles/add')}
+            >
+              <FontAwesome name="plus" size={18} color="#004225" />
+            </Pressable>
+          </View>
+          {vehicles.map((vehicle) => (
+            <Pressable
+              key={vehicle.id}
+              style={styles.vehicleCard}
+              onPress={() => router.push(`/profile/vehicle/${vehicle.id}`)}
+            >
+              <View style={styles.vehicleColorBadge}>
+                <Text style={styles.vehicleColorText}>{vehicle.color}</Text>
+              </View>
+              <View style={styles.vehicleImagePlaceholder}>
+                <FontAwesome name="car" size={32} color="#999" />
+              </View>
+              <View style={styles.vehicleInfo}>
+                <Text style={styles.vehicleNickname}>{vehicle.nickname || 'Nickname'}</Text>
+                <Text style={styles.vehicleName}>
+                  {vehicle.year} {vehicle.make} {vehicle.model} {vehicle.sub_model || vehicle.subModel}
+                </Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Recent Drives */}
+        <View style={styles.recentDrivesSection}>
+          <Text style={styles.sectionTitle}>Recent Drives</Text>
+          {recentDrives.length > 0 ? (
+            recentDrives.map((drive) => (
+              <Pressable
+                key={drive.id}
+                style={styles.driveCard}
+                onPress={() => router.push(`/drives/${drive.id}/lobby`)}
+              >
+                <View style={styles.driveImagePlaceholder}>
+                  <FontAwesome name="map-marker" size={24} color="#999" />
+                </View>
+                <View style={styles.driveInfo}>
+                  <Text style={styles.driveTitle}>
+                    {drive.title || 'Drive Event Title'}
+                  </Text>
+                  <Text style={styles.driveRoute}>
+                    {typeof drive.start_location === 'string'
+                      ? drive.start_location
+                      : drive.start_location?.name || 'City, ST'} to{' '}
+                    {typeof drive.end_location === 'string'
+                      ? drive.end_location
+                      : drive.end_location?.name || 'City, ST'}
+                  </Text>
+                  <View style={styles.driveMeta}>
+                    <Text style={styles.driveDate}>
+                      {drive.start_time ? new Date(drive.start_time).toLocaleDateString() : '00/00/0000'}
+                    </Text>
+                    <Text style={styles.driveDistance}>000mi</Text>
+                    <View style={styles.driveParticipants}>
+                      <FontAwesome name="users" size={12} color="#666" />
+                      <Text style={styles.driveParticipantsText}>XX</Text>
+                    </View>
+                  </View>
+                </View>
+              </Pressable>
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No recent drives</Text>
             </View>
           )}
-          <View style={styles.avatarBorder} />
         </View>
-        <Pressable style={styles.shareButton}>
-          <FontAwesome name="share" size={20} color="#000" />
-        </Pressable>
-      </View>
-
-      {/* User Info */}
-      <View style={styles.userInfo}>
-        <Text style={styles.name}>{displayName}</Text>
-        <Text style={styles.username}>@{username}</Text>
-        <Text style={styles.location}>{location}</Text>
-        
-        {/* Social Icons */}
-        <View style={styles.socialIcons}>
-          <FontAwesome name="camera" size={20} color="#666" />
-          <FontAwesome name="video-camera" size={20} color="#666" />
-          <FontAwesome name="map" size={20} color="#666" />
-          <FontAwesome name="cog" size={20} color="#666" />
-          <Text style={styles.friendsBadge}>2</Text>
-        </View>
-      </View>
-
-      {/* Drive Stats */}
-      <View style={styles.statsSection}>
-        <Text style={styles.sectionTitle}>Drive Stats</Text>
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>
-              {stats?.total_miles ? stats.total_miles.toLocaleString().padStart(5, '0') : '00,000'}
-            </Text>
-            <Text style={styles.statLabel}>Total Miles</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>
-              {stats?.drives_led ? stats.drives_led.toString().padStart(2, '0') : '00'}
-            </Text>
-            <Text style={styles.statLabel}>Drives Led</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>
-              {stats?.events_joined ? stats.events_joined.toString().padStart(2, '0') : '00'}
-            </Text>
-            <Text style={styles.statLabel}>Events Joined</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>#000</Text>
-            <Text style={styles.statLabel}>Lance Ranking</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* My Garage */}
-      <View style={styles.garageSection}>
-        <Text style={styles.sectionTitle}>My Garage ({vehicles.length})</Text>
-        {vehicles.map((vehicle) => (
-          <Pressable
-            key={vehicle.id}
-            style={styles.vehicleCard}
-            onPress={() => router.push(`/profile/vehicle/${vehicle.id}`)}
-          >
-            <View style={styles.vehicleImagePlaceholder}>
-              <FontAwesome name="car" size={40} color="#666" />
-            </View>
-            <View style={styles.vehicleInfo}>
-              <View style={styles.colorBadge}>
-                <Text style={styles.colorText}>{vehicle.color}</Text>
-              </View>
-              <Text style={styles.vehicleName}>
-                {vehicle.year} {vehicle.make} {vehicle.model} {vehicle.subModel}
-              </Text>
-            </View>
-          </Pressable>
-        ))}
-      </View>
-
-      {/* Recent Drives */}
-      <View style={styles.recentDrivesSection}>
-        <Text style={styles.sectionTitle}>Recent Drives</Text>
-        {recentDrives.map((drive) => (
-          <Pressable
-            key={drive.id}
-            style={styles.driveCard}
-            onPress={() => router.push(`/drives/${drive.id}/lobby`)}
-          >
-            <Text style={styles.driveTitle}>
-              {drive.title || 'Drive Event Title'}
-            </Text>
-            <Text style={styles.driveRoute}>
-              {typeof drive.start_location === 'string'
-                ? drive.start_location
-                : drive.start_location?.name || 'City, ST'} to{' '}
-              {typeof drive.end_location === 'string'
-                ? drive.end_location
-                : drive.end_location?.name || 'City, ST'}
-            </Text>
-            <Text style={styles.driveDate}>
-              {drive.start_time ? new Date(drive.start_time).toLocaleDateString() : '00/00/0000'} 0000
-            </Text>
-            <Text style={styles.driveDistance}>00mi</Text>
-          </Pressable>
-        ))}
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FAFAFA',
+  },
+  scrollView: {
+    flex: 1,
   },
   profileHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
     paddingBottom: 20,
   },
   avatarContainer: {
     position: 'relative',
+    alignItems: 'center',
   },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#E0E0E0',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#004225',
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarPlaceholder: {
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#004225',
   },
-  avatarBorder: {
+  headerActions: {
     position: 'absolute',
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    borderWidth: 3,
-    borderColor: '#4CAF50',
-    top: -5,
-    left: -5,
+    right: 20,
+    flexDirection: 'column',
+    gap: 12,
   },
-  shareButton: {
-    padding: 8,
+  actionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   userInfo: {
     paddingHorizontal: 20,
@@ -253,7 +505,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   name: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#000',
     marginBottom: 4,
@@ -261,32 +513,79 @@ const styles = StyleSheet.create({
   username: {
     fontSize: 16,
     color: '#666',
-    marginBottom: 4,
+    marginBottom: 8,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
   },
   location: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 16,
+  },
+  friendsCount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  friendsCountText: {
+    fontSize: 14,
+    color: '#000',
+    fontWeight: '600',
   },
   socialIcons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    position: 'relative',
+    gap: 20,
   },
-  friendsBadge: {
-    position: 'absolute',
-    right: -8,
-    top: -8,
-    backgroundColor: '#4CAF50',
+  socialIcon: {
+    padding: 8,
+  },
+  editInput: {
+    width: '100%',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 12,
+    color: '#000',
+  },
+  editActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+    width: '100%',
+  },
+  saveButton: {
+    flex: 1,
+    backgroundColor: '#004225',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveButtonText: {
     color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    minWidth: 20,
-    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '600',
   },
   statsSection: {
     paddingHorizontal: 20,
@@ -304,16 +603,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   statCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#F5F5F5',
     borderRadius: 12,
     padding: 16,
     width: '47%',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   statValue: {
     fontSize: 24,
@@ -329,18 +623,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 24,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  addButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   vehicleCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#F5F5F5',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    gap: 12,
+  },
+  vehicleColorBadge: {
+    backgroundColor: '#E0E0E0',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  vehicleColorText: {
+    fontSize: 12,
+    color: '#666',
   },
   vehicleImagePlaceholder: {
     width: 80,
@@ -349,61 +665,83 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
   },
   vehicleInfo: {
     flex: 1,
   },
-  colorBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#F5F5F5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  colorText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  vehicleName: {
-    fontSize: 16,
+  vehicleNickname: {
+    fontSize: 14,
     fontWeight: '600',
     color: '#000',
+    marginBottom: 4,
+  },
+  vehicleName: {
+    fontSize: 14,
+    color: '#666',
   },
   recentDrivesSection: {
     paddingHorizontal: 20,
     paddingBottom: 40,
   },
   driveCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#F5F5F5',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    flexDirection: 'row',
+    gap: 12,
+  },
+  driveImagePlaceholder: {
+    width: 60,
+    height: 60,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  driveInfo: {
+    flex: 1,
   },
   driveTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#000',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   driveRoute: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 4,
+    marginBottom: 8,
+  },
+  driveMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   driveDate: {
     fontSize: 12,
     color: '#666',
-    marginBottom: 4,
   },
   driveDistance: {
     fontSize: 12,
     color: '#666',
+  },
+  driveParticipants: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginLeft: 'auto',
+  },
+  driveParticipantsText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#999',
   },
 });

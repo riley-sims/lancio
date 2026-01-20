@@ -1,11 +1,10 @@
-import { StyleSheet, View, ScrollView, ActivityIndicator, Pressable, Image } from 'react-native';
-import { Text } from '@/components/Themed';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { auth, db } from '@/lib/supabase';
-import { FontAwesome } from '@expo/vector-icons';
-import { storage } from '@/lib/supabase';
 import MapView from '@/components/maps/MapView';
+import { Text } from '@/components/Themed';
+import { auth, db, storage } from '@/lib/supabase';
+import { FontAwesome } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function DriveLobbyScreen() {
   const router = useRouter();
@@ -402,7 +401,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#004225',
     marginRight: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -417,7 +416,7 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#004225',
   },
   noDrivers: {
     fontSize: 14,
@@ -445,7 +444,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionButtonRegistered: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#004225',
   },
   actionButtonText: {
     color: '#fff',

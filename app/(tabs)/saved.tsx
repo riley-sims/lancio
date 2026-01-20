@@ -1,9 +1,9 @@
 import { Text } from '@/components/Themed';
 import { auth, db } from '@/lib/supabase';
+import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View, Pressable } from 'react-native';
-import { FontAwesome } from '@expo/vector-icons';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function SavedScreen() {
   const router = useRouter();
@@ -55,14 +55,34 @@ export default function SavedScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Saved + Recents</Text>
-        <Text style={styles.headerSubtitle}>{sectionTitle}</Text>
+        <Pressable 
+          style={styles.createDriveButton}
+          onPress={() => router.push('/drives/create')}
+        >
+          <FontAwesome name="plus" size={14} color="#004225" />
+          <Text style={styles.createDriveButtonText}>Create Drive</Text>
+        </Pressable>
       </View>
 
       {drives.length === 0 ? (
         <View style={styles.emptyState}>
+          <FontAwesome 
+            name="map" 
+            size={64} 
+            color="#E0E0E0" 
+          />
           <Text style={styles.emptyText}>
-            No {activeSection === 'favorites' ? 'favorite' : 'recent'} drives yet
+            No saved drives yet
           </Text>
+          <Text style={styles.emptySubtext}>
+            Create your first custom drive to get started!
+          </Text>
+          <Pressable 
+            style={styles.emptyCreateButton}
+            onPress={() => router.push('/drives/create')}
+          >
+            <Text style={styles.emptyCreateButtonText}>Create Drive</Text>
+          </Pressable>
         </View>
       ) : (
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -102,23 +122,33 @@ export default function SavedScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FAFAFA',
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FAFAFA',
   },
   headerTitle: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#000',
-    marginBottom: 4,
   },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#666',
+  createDriveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  createDriveButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#004225',
   },
   scrollView: {
     flex: 1,
@@ -168,8 +198,31 @@ const styles = StyleSheet.create({
     padding: 40,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontSize: 14,
     color: '#666',
+    textAlign: 'center',
+    maxWidth: 280,
+    marginBottom: 24,
+  },
+  emptyCreateButton: {
+    backgroundColor: '#004225',
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  emptyCreateButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

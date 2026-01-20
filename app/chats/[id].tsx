@@ -1,10 +1,10 @@
-import { StyleSheet, View, ScrollView, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { Text } from '@/components/Themed';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState, useRef } from 'react';
 import { auth, chats as chatsHelper, messages as messagesHelper } from '@/lib/supabase';
-import { FontAwesome } from '@expo/vector-icons';
 import { formatTime } from '@/utils/helpers';
+import { FontAwesome } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 60,
+    paddingTop: 50,
     paddingBottom: 16,
     backgroundColor: '#F5F5F5',
   },

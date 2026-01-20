@@ -1,10 +1,10 @@
-import { StyleSheet, View, ScrollView, ActivityIndicator, Pressable } from 'react-native';
 import { Text } from '@/components/Themed';
+import { auth, chats as chatsHelper } from '@/lib/supabase';
+import { formatDateTime } from '@/utils/helpers';
+import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { auth, chats as chatsHelper } from '@/lib/supabase';
-import { FontAwesome } from '@expo/vector-icons';
-import { formatDateTime } from '@/utils/helpers';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function ChatsScreen() {
   const router = useRouter();
@@ -118,7 +118,15 @@ export default function ChatsScreen() {
       {/* Chat List */}
       {filteredChats.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>No chats yet</Text>
+          <FontAwesome name="comments" size={48} color="#CCCCCC" />
+          <Text style={styles.emptyText}>
+            {selectedFilter === 'all' 
+              ? 'No chats yet' 
+              : `No ${selectedFilter === 'drives' ? 'drive' : selectedFilter} chats yet`}
+          </Text>
+          <Text style={styles.emptySubtext}>
+            Start a conversation with friends or join a drive chat
+          </Text>
         </View>
       ) : (
         <ScrollView style={styles.scrollView}>
@@ -132,7 +140,7 @@ export default function ChatsScreen() {
                 style={styles.chatItem}
                 onPress={() => router.push(`/chats/${chat.id}`)}
               >
-                <View style={[styles.chatAvatar, { backgroundColor: chat.type === 'community' ? '#9C27B0' : '#4CAF50' }]}>
+                <View style={[styles.chatAvatar, { backgroundColor: chat.type === 'community' ? '#9C27B0' : '#004225' }]}>
                   {chat.participants && chat.participants.length > 0 ? (
                     <FontAwesome name="users" size={24} color="#fff" />
                   ) : (
@@ -163,7 +171,7 @@ export default function ChatsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FAFAFA',
   },
   header: {
     flexDirection: 'row',
@@ -172,7 +180,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FAFAFA',
   },
   headerTitle: {
     fontSize: 28,
@@ -180,7 +188,7 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   newChatButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#004225',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -200,7 +208,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#fff',
+    backgroundColor: '#FAFAFA',
   },
   tabActive: {
     backgroundColor: '#000',
@@ -228,7 +236,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#004225',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -270,7 +278,17 @@ const styles = StyleSheet.create({
     padding: 40,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontSize: 14,
     color: '#666',
+    textAlign: 'center',
+    maxWidth: 280,
   },
 });
