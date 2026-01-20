@@ -17,8 +17,7 @@ export {
 } from 'expo-router';
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: 'login',
+  initialRouteName: 'index',
 };
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -57,6 +56,7 @@ function RootLayoutNav() {
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <AuthProvider>
           <Stack>
+            <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen name="login" options={{ headerShown: false }} />
             <Stack.Screen name="signup" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -64,6 +64,7 @@ function RootLayoutNav() {
             <Stack.Screen name="chats" options={{ headerShown: false }} />
             <Stack.Screen name="drives" options={{ headerShown: false }} />
             <Stack.Screen name="friends" options={{ headerShown: false }} />
+            <Stack.Screen name="profile" options={{ headerShown: false }} />
           </Stack>
         </AuthProvider>
       </ThemeProvider>
