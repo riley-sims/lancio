@@ -32,6 +32,8 @@ interface MapViewProps {
   onMarkerPress?: (markerId: string) => void;
   onMapPress?: (coordinates: [number, number]) => void;
   route?: Array<[number, number]>; // Route coordinates for driving directions
+  /** Your live location — shown as a blue "you" icon and used as route start when building routes */
+  userLocation?: [number, number] | null;
 }
 
 export default function MapView({
@@ -43,6 +45,7 @@ export default function MapView({
   onMarkerPress,
   onMapPress,
   route,
+  userLocation = null,
 }: MapViewProps) {
   const [isReady, setIsReady] = useState(false);
   const [center, setCenter] = useState<[number, number]>(
@@ -83,20 +86,14 @@ export default function MapView({
     }
   }, [initialCenter, initialZoom]);
 
-  // Update camera when markers or route change - fit bounds to show all points
+  // Update camera when markers, route, or userLocation change - fit bounds to show all points
   useEffect(() => {
-    if (cameraRef.current && (markers.length > 0 || (route && route.length > 0))) {
+    const hasContent = markers.length > 0 || (route && route.length > 0) || userLocation;
+    if (cameraRef.current && hasContent) {
       const allPoints: [number, number][] = [];
-      
-      // Add marker coordinates
-      markers.forEach(marker => {
-        allPoints.push(marker.coordinates);
-      });
-      
-      // Add route coordinates
-      if (route && route.length > 0) {
-        allPoints.push(...route);
-      }
+      if (userLocation) allPoints.push(userLocation);
+      markers.forEach(marker => allPoints.push(marker.coordinates));
+      if (route && route.length > 0) allPoints.push(...route);
       
       if (allPoints.length > 0) {
         // Calculate bounds
@@ -128,7 +125,7 @@ export default function MapView({
         setZoom(calculatedZoom);
       }
     }
-  }, [markers, route]);
+  }, [markers, route, userLocation]);
 
   // Show placeholder when: missing native Mapbox, no valid token, or not ready
   if (!Mapbox || !MapboxMapView || !Camera || !isReady || !hasValidToken) {
@@ -189,6 +186,19 @@ export default function MapView({
               />
             </ShapeSource>
           )}
+
+          {/* You — live location (blue, distinct from destination pins) */}
+          {userLocation && (
+            <PointAnnotation id="user-location" coordinate={userLocation}>
+              <View style={styles.userLocationContainer}>
+                <View style={styles.userLocationOuter}>
+                  <View style={styles.userLocationInner}>
+                    <FontAwesome name="location-arrow" size={14} color="#FFF" />
+                  </View>
+                </View>
+              </View>
+            </PointAnnotation>
+          )}
           
           {/* Markers */}
           {markers.map((marker) => (
@@ -241,6 +251,29 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
+  },
+  userLocationContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userLocationOuter: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#007AFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#FFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  userLocationInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

@@ -1,18 +1,19 @@
 import LocationSearchInput from '@/components/maps/LocationSearchInput';
 import MapView from '@/components/maps/MapView';
 import { Text } from '@/components/Themed';
+import { useUserLocation } from '@/hooks/useUserLocation';
 import { LocationSuggestion } from '@/lib/locationSearch';
 import { mapHelpers } from '@/lib/mapbox';
 import { FontAwesome } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { coords: userLocation, loading: loadingLocation } = useUserLocation();
   const [destination, setDestination] = useState('');
   const [destinationLocation, setDestinationLocation] = useState<LocationSuggestion | null>(null);
   const [stopA, setStopA] = useState('');
@@ -20,53 +21,22 @@ export default function HomeScreen() {
   const [driveStyle, setDriveStyle] = useState("Let's have fun");
   const [friends, setFriends] = useState('');
   const [mapMarkers, setMapMarkers] = useState<Array<{ id: string; coordinates: [number, number]; title?: string }>>([]);
-  const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [mapCenter, setMapCenter] = useState<[number, number]>([-122.4194, 37.7749]); // San Francisco
   const [mapZoom, setMapZoom] = useState(12);
-  const [loadingLocation, setLoadingLocation] = useState(false);
   const [route, setRoute] = useState<Array<[number, number]>>([]);
   const [loadingRoute, setLoadingRoute] = useState(false);
+  const hasCenteredOnUser = useRef(false);
 
-  // Get user's current location
-  const getCurrentLocation = useCallback(async () => {
-    setLoadingLocation(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('Location permission denied');
-        return;
-      }
-
-      const location = await Location.getCurrentPositionAsync({});
-      const coords: [number, number] = [location.coords.longitude, location.coords.latitude];
-      setCurrentLocation(coords);
-      setMapCenter(coords);
-      setMapZoom(14);
-      
-      // Update markers to include current location
-      setMapMarkers(prev => {
-        const newMarkers: Array<{ id: string; coordinates: [number, number]; title: string }> = [{ id: 'current', coordinates: coords, title: 'Current Location' }];
-        // Keep existing markers but replace current if it exists
-        prev.forEach(marker => {
-          if (marker.id !== 'current' && marker.title) {
-            newMarkers.push({ id: marker.id, coordinates: marker.coordinates, title: marker.title });
-          }
-        });
-        return newMarkers;
-      });
-    } catch (error) {
-      console.error('Error getting location:', error);
-    } finally {
-      setLoadingLocation(false);
-    }
-  }, []);
-
-  // Get current location on mount
+  // Center on user when we get first location and no destination yet
   useEffect(() => {
-    getCurrentLocation();
-  }, [getCurrentLocation]);
+    if (userLocation && !hasCenteredOnUser.current && !destinationLocation) {
+      hasCenteredOnUser.current = true;
+      setMapCenter(userLocation);
+      setMapZoom(14);
+    }
+  }, [userLocation, destinationLocation]);
 
-  // Fetch route when locations change
+  // Fetch route when locations change — start from your live location
   useEffect(() => {
     const fetchRoute = async () => {
       if (!destinationLocation) {
@@ -76,10 +46,10 @@ export default function HomeScreen() {
 
       setLoadingRoute(true);
       try {
-        const start = currentLocation || mapCenter;
+        const start = userLocation || mapCenter;
         const end = destinationLocation.center;
         const waypoints = stopALocation ? [stopALocation.center] : undefined;
-        
+
         const routeData = await mapHelpers.getRoute(start, end, waypoints, 'driving');
         setRoute(routeData.coordinates);
       } catch (error) {
@@ -91,41 +61,28 @@ export default function HomeScreen() {
     };
 
     fetchRoute();
-  }, [currentLocation, destinationLocation, stopALocation, mapCenter]);
+  }, [userLocation, destinationLocation, stopALocation, mapCenter]);
 
-  // Handle destination selection
+  // Handle destination selection (your location is shown via userLocation prop, not as a marker)
   const handleDestinationSelect = useCallback((location: LocationSuggestion) => {
     setDestinationLocation(location);
     setMapCenter(location.center);
     setMapZoom(14);
-    
-    // Update markers
-    const newMarkers = [];
-    if (currentLocation) {
-      newMarkers.push({ id: 'current', coordinates: currentLocation, title: 'Current Location' });
-    }
-    newMarkers.push({ id: 'destination', coordinates: location.center, title: location.name });
-    if (stopALocation) {
-      newMarkers.push({ id: 'stopA', coordinates: stopALocation.center, title: stopALocation.name });
-    }
+
+    const newMarkers = [{ id: 'destination', coordinates: location.center, title: location.name }];
+    if (stopALocation) newMarkers.push({ id: 'stopA', coordinates: stopALocation.center, title: stopALocation.name });
     setMapMarkers(newMarkers);
-  }, [stopALocation, currentLocation]);
+  }, [stopALocation]);
 
   // Handle stop selection
   const handleStopASelect = useCallback((location: LocationSuggestion) => {
     setStopALocation(location);
-    
-    // Update markers
+
     const newMarkers = [];
-    if (currentLocation) {
-      newMarkers.push({ id: 'current', coordinates: currentLocation, title: 'Current Location' });
-    }
-    if (destinationLocation) {
-      newMarkers.push({ id: 'destination', coordinates: destinationLocation.center, title: destinationLocation.name });
-    }
+    if (destinationLocation) newMarkers.push({ id: 'destination', coordinates: destinationLocation.center, title: destinationLocation.name });
     newMarkers.push({ id: 'stopA', coordinates: location.center, title: location.name });
     setMapMarkers(newMarkers);
-  }, [destinationLocation, currentLocation]);
+  }, [destinationLocation]);
 
   // Handle creating a drive
   const handleCreateDrive = () => {
@@ -156,21 +113,22 @@ export default function HomeScreen() {
     <View style={styles.container}>
       {/* Map Section - Full Screen */}
       <View style={styles.mapContainer}>
-        <MapView 
+        <MapView
           key={`${mapCenter[0]}-${mapCenter[1]}-${mapZoom}`}
           initialCenter={mapCenter}
           initialZoom={mapZoom}
           markers={mapMarkers}
           route={route}
+          userLocation={userLocation}
           onMapPress={handleMapPress}
         />
-        
-        {/* Map Controls */}
+
+        {/* Map Controls — center on your location */}
         <View style={[styles.mapControls, { top: insets.top + 10 }]}>
-          <Pressable 
+          <Pressable
             style={styles.mapControlButton}
-            onPress={getCurrentLocation}
-            disabled={loadingLocation}
+            onPress={() => { if (userLocation) { setMapCenter(userLocation); setMapZoom(14); } }}
+            disabled={loadingLocation || !userLocation}
           >
             {loadingLocation ? (
               <ActivityIndicator size="small" color="#000" />

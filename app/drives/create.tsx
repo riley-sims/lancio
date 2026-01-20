@@ -1,13 +1,15 @@
-import { StyleSheet, View, ScrollView, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
-import { Text } from '@/components/Themed';
-import { useRouter } from 'expo-router';
-import { useState, useEffect } from 'react';
-import { auth, db, friends as friendsHelper } from '@/lib/supabase';
 import MapView from '@/components/maps/MapView';
+import { Text } from '@/components/Themed';
+import { useUserLocation } from '@/hooks/useUserLocation';
+import { auth, db, friends as friendsHelper } from '@/lib/supabase';
 import { FontAwesome } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 export default function CreateDriveScreen() {
   const router = useRouter();
+  const { coords: userLocation } = useUserLocation();
   const [destination, setDestination] = useState('');
   const [stops, setStops] = useState<string[]>([]);
   const [stopInput, setStopInput] = useState('');
@@ -70,12 +72,13 @@ export default function CreateDriveScreen() {
         return;
       }
 
-      // Create drive data
+      // Create drive data — use your live location as start when available
+      const startCoords = userLocation ? [userLocation[0], userLocation[1]] : [0, 0];
       const driveData = {
         creator_id: user.id,
         title: `Drive to ${destination}`,
         description: '',
-        start_location: { name: 'My Location', coordinates: [0, 0] }, // TODO: Get actual location
+        start_location: { name: 'My Location', coordinates: startCoords },
         end_location: { name: destination, coordinates: [0, 0] }, // TODO: Geocode destination
         start_time: new Date().toISOString(),
         max_participants: 35,
@@ -112,9 +115,14 @@ export default function CreateDriveScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Map View */}
+      {/* Map View — your location shown as blue dot for building routes from you */}
       <View style={styles.mapContainer}>
-        <MapView style={styles.map} />
+        <MapView
+          style={styles.map}
+          initialCenter={userLocation ?? undefined}
+          initialZoom={userLocation ? 14 : 10}
+          userLocation={userLocation}
+        />
       </View>
 
       {/* Bottom Sheet */}

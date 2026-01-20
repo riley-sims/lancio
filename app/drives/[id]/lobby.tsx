@@ -1,5 +1,6 @@
 import MapView from '@/components/maps/MapView';
 import { Text } from '@/components/Themed';
+import { useUserLocation } from '@/hooks/useUserLocation';
 import { auth, db, storage } from '@/lib/supabase';
 import { FontAwesome } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -9,6 +10,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } fro
 export default function DriveLobbyScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { coords: userLocation } = useUserLocation();
   const [drive, setDrive] = useState<any>(null);
   const [participants, setParticipants] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,12 +182,13 @@ export default function DriveLobbyScreen() {
         </ScrollView>
       </View>
 
-      {/* Map */}
+      {/* Map — your location shown as blue dot */}
       <View style={styles.mapContainer}>
-        <MapView 
-          initialCenter={[-122.4194, 37.7749]}
-          initialZoom={10}
+        <MapView
+          initialCenter={userLocation ?? [-122.4194, 37.7749]}
+          initialZoom={userLocation ? 14 : 10}
           style={styles.map}
+          userLocation={userLocation}
         />
       </View>
 
