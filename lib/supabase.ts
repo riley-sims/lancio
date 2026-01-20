@@ -7,7 +7,9 @@ const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
 // Validate environment variables
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('⚠️ Supabase environment variables are not set. Please check your .env file.');
+  console.error('⚠️ Supabase environment variables are not set. Please check your .env file.');
+  console.error('EXPO_PUBLIC_SUPABASE_URL:', supabaseUrl ? 'Set' : 'Missing');
+  console.error('EXPO_PUBLIC_SUPABASE_ANON_KEY:', supabaseAnonKey ? 'Set' : 'Missing');
 }
 
 // Custom storage adapter for React Native using SecureStore
@@ -29,6 +31,12 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    flowType: 'pkce',
+  },
+  global: {
+    // Use React Native fetch as-is; avoid custom header merge that can break
+    // Supabase (e.g. Headers object, undefined) and cause network errors.
+    fetch: (...args: Parameters<typeof fetch>) => fetch(...args),
   },
 });
 
@@ -89,10 +97,10 @@ export const db = {
       .from('drives')
       .select(`
         *,
-        creator:profiles!drives_creator_id_fkey(*),
+        creator:profiles(*),
         participants:drive_participants(
           *,
-          user:profiles!drive_participants_user_id_fkey(*)
+          user:profiles(*)
         ),
         stops:drive_stops(*)
       `)
@@ -106,7 +114,7 @@ export const db = {
       .from('drives')
       .select(`
         *,
-        creator:profiles!drives_creator_id_fkey(*),
+        creator:profiles(*),
         participants:drive_participants(count)
       `)
       .gte('start_time', new Date().toISOString())
@@ -119,7 +127,7 @@ export const db = {
       .from('drives')
       .select(`
         *,
-        creator:profiles!drives_creator_id_fkey(*),
+        creator:profiles(*),
         participants:drive_participants(count)
       `)
       .or(`creator_id.eq.${userId},participants.user_id.eq.${userId}`)
@@ -226,8 +234,49 @@ export const db = {
   },
   
   getUserProfileWithStats: async (userId: string) => {
+    try {
+      // Get drives led by user
+      const { count: drivesLedCount, error: drivesLedError } = await supabase
+        .from('drives')
+        .select('*', { count: 'exact', head: true })
+        .eq('creator_id', userId);
+
+      // Get drives user participated in
+      const { count: eventsJoinedCount, error: eventsJoinedError } = await supabase
+        .from('drive_participants')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+
+      if (drivesLedError || eventsJoinedError) {
+        return { 
+          data: null, 
+          error: drivesLedError || eventsJoinedError 
+        };
+      }
+
+      // Return stats in the expected format
+      // Note: total_miles would need a distance calculation, for now using 0
+      const stats = [{
+        total_miles: 0,
+        drives_led: drivesLedCount || 0,
+        events_joined: eventsJoinedCount || 0,
+      }];
+
+      return { data: stats, error: null };
+    } catch (error: any) {
+      return { data: null, error };
+    }
+  },
+  
+  createUserProfile: async (userId: string, profileData: any) => {
     const { data, error } = await supabase
-      .rpc('get_user_drive_stats', { user_uuid: userId });
+      .from('profiles')
+      .insert([{
+        id: userId,
+        ...profileData,
+      }])
+      .select()
+      .single();
     return { data, error };
   },
   
@@ -259,12 +308,13 @@ export const chats = {
       .select(`
         *,
         participants:chat_participants(
-          user:profiles!chat_participants_user_id_fkey(*)
+          *,
+          user:profiles(*)
         ),
         last_message:messages(
           content,
           created_at,
-          sender:profiles!messages_sender_id_fkey(username)
+          sender:profiles(username)
         )
       `)
       .order('updated_at', { ascending: false });
@@ -277,7 +327,8 @@ export const chats = {
       .select(`
         *,
         participants:chat_participants(
-          user:profiles!chat_participants_user_id_fkey(*)
+          *,
+          user:profiles(*)
         )
       `)
       .eq('id', chatId)
@@ -308,7 +359,7 @@ export const chats = {
       .from('chat_participants')
       .select(`
         *,
-        user:profiles!chat_participants_user_id_fkey(*)
+        user:profiles(*)
       `)
       .eq('chat_id', chatId);
     return { data, error };
@@ -322,7 +373,7 @@ export const messages = {
       .from('messages')
       .select(`
         *,
-        sender:profiles!messages_sender_id_fkey(*)
+        sender:profiles(*)
       `)
       .eq('chat_id', chatId)
       .order('created_at', { ascending: false })
@@ -336,7 +387,7 @@ export const messages = {
       .insert([{ chat_id: chatId, sender_id: senderId, content }])
       .select(`
         *,
-        sender:profiles!messages_sender_id_fkey(*)
+        sender:profiles(*)
       `)
       .single();
     
@@ -378,7 +429,7 @@ export const friends = {
       .from('friends')
       .select(`
         *,
-        friend:profiles!friends_friend_id_fkey(*)
+        friend:profiles(*)
       `)
       .eq('user_id', userId)
       .eq('status', status);
@@ -390,7 +441,7 @@ export const friends = {
       .from('friends')
       .select(`
         *,
-        user:profiles!friends_user_id_fkey(*)
+        user:profiles(*)
       `)
       .eq('friend_id', userId)
       .eq('status', 'pending');
