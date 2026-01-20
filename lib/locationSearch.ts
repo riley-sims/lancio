@@ -1,4 +1,4 @@
-r// Location search using Mapbox Geocoding API
+// Location search using Mapbox Geocoding API
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || '';
 
 export interface LocationSuggestion {

@@ -51,42 +51,27 @@ export default function MapView({
   const [zoom, setZoom] = useState(initialZoom || mapConfig.zoomLevel);
   const cameraRef = useRef<any>(null);
 
+  const mapboxToken = (process.env.EXPO_PUBLIC_MAPBOX_TOKEN || '').trim();
+  const hasValidToken = mapboxToken.length > 0 && mapboxToken.startsWith('pk.');
+
   useEffect(() => {
-    // Ensure Mapbox is initialized
-    const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || '';
-    
-    // Debug logging
-    console.log('🗺️ MapView Debug:', {
-      hasMapbox: !!Mapbox,
-      hasMapView: !!MapboxMapView,
-      hasCamera: !!Camera,
-      hasShapeSource: !!ShapeSource,
-      hasLineLayer: !!LineLayer,
-      hasToken: !!MAPBOX_TOKEN,
-      tokenLength: MAPBOX_TOKEN.length,
-      tokenPrefix: MAPBOX_TOKEN.substring(0, 3),
-      styleURL: mapConfig.styleURL,
-    });
-    
-    if (MAPBOX_TOKEN && Mapbox) {
+    if (hasValidToken && Mapbox) {
       try {
-        Mapbox.setAccessToken(MAPBOX_TOKEN);
-        console.log('✅ Mapbox access token set successfully');
+        Mapbox.setAccessToken(mapboxToken);
         setIsReady(true);
       } catch (error) {
-        console.warn('❌ Mapbox initialization error:', error);
-        setIsReady(true); // Still render even if token setup fails
+        console.warn('Mapbox setAccessToken error:', error);
+        setIsReady(false);
       }
     } else {
-      if (!MAPBOX_TOKEN) {
-        console.warn('⚠️ EXPO_PUBLIC_MAPBOX_TOKEN is not set');
+      if (!mapboxToken) {
+        console.warn('EXPO_PUBLIC_MAPBOX_TOKEN is not set. Add a public token (pk.) to .env and rebuild.');
+      } else if (!mapboxToken.startsWith('pk.')) {
+        console.warn('EXPO_PUBLIC_MAPBOX_TOKEN must be a Mapbox public token (starts with pk.).');
       }
-      if (!Mapbox) {
-        console.warn('⚠️ @rnmapbox/maps module not available - are you running in Expo Go?');
-      }
-      setIsReady(true); // Render anyway, might work if token is set elsewhere
+      setIsReady(false);
     }
-  }, []);
+  }, [hasValidToken]);
 
   // Update camera when initialCenter or initialZoom changes
   useEffect(() => {
@@ -145,16 +130,19 @@ export default function MapView({
     }
   }, [markers, route]);
 
-  // Check if Mapbox components are available
-  if (!Mapbox || !MapboxMapView || !Camera || !isReady) {
+  // Show placeholder when: missing native Mapbox, no valid token, or not ready
+  if (!Mapbox || !MapboxMapView || !Camera || !isReady || !hasValidToken) {
+    const isTokenIssue = Mapbox && MapboxMapView && Camera && !hasValidToken;
     return (
       <View style={[styles.container, style, { backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center' }]}>
         <FontAwesome name="map" size={48} color="#666" />
         <Text style={{ color: '#999', textAlign: 'center', marginTop: 16, fontSize: 14 }}>
-          Map requires native build
+          {isTokenIssue ? 'Mapbox token required' : 'Map requires native build'}
         </Text>
         <Text style={{ color: '#666', textAlign: 'center', marginTop: 8, fontSize: 12, paddingHorizontal: 40 }}>
-          Run: npx expo run:ios or npx expo run:android
+          {isTokenIssue
+            ? 'Add EXPO_PUBLIC_MAPBOX_TOKEN (pk.…) to .env and restart Metro.'
+            : 'Run: npx expo run:ios or npx expo run:android'}
         </Text>
       </View>
     );

@@ -2,14 +2,12 @@
 let Mapbox: any = null;
 try {
   Mapbox = require('@rnmapbox/maps');
-  // Initialize Mapbox with your token
-  const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || '';
-  
-  // Set access token if available
-  if (MAPBOX_TOKEN && Mapbox) {
+  const MAPBOX_TOKEN = (process.env.EXPO_PUBLIC_MAPBOX_TOKEN || '').trim();
+  // Only set token if it's a Mapbox public token (pk.); avoids 401 on tile load
+  if (MAPBOX_TOKEN.startsWith('pk.') && Mapbox) {
     Mapbox.setAccessToken(MAPBOX_TOKEN);
-  } else {
-    console.warn('⚠️ EXPO_PUBLIC_MAPBOX_TOKEN is not set. Mapbox features will not work.');
+  } else if (!MAPBOX_TOKEN) {
+    console.warn('EXPO_PUBLIC_MAPBOX_TOKEN is not set. Mapbox will not load.');
   }
 } catch (error) {
   console.warn('⚠️ @rnmapbox/maps native code not available. Mapbox features will not work.');

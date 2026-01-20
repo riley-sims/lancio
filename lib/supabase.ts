@@ -97,11 +97,7 @@ export const db = {
       .from('drives')
       .select(`
         *,
-        creator:profiles(*),
-        participants:drive_participants(
-          *,
-          user:profiles(*)
-        ),
+        participants:drive_participants(*),
         stops:drive_stops(*)
       `)
       .eq('id', id)
@@ -114,7 +110,6 @@ export const db = {
       .from('drives')
       .select(`
         *,
-        creator:profiles(*),
         participants:drive_participants(count)
       `)
       .gte('start_time', new Date().toISOString())
@@ -123,16 +118,41 @@ export const db = {
   },
   
   getUserDrives: async (userId: string) => {
-    const { data, error } = await supabase
+    // Drives I created
+    const { data: created, error: e1 } = await supabase
       .from('drives')
-      .select(`
-        *,
-        creator:profiles(*),
-        participants:drive_participants(count)
-      `)
-      .or(`creator_id.eq.${userId},participants.user_id.eq.${userId}`)
+      .select(`*, participants:drive_participants(count)`)
+      .eq('creator_id', userId)
       .order('start_time', { ascending: true });
-    return { data, error };
+
+    if (e1) return { data: null, error: e1 };
+
+    // Drives I joined (via drive_participants)
+    const { data: joinedRows, error: e2 } = await supabase
+      .from('drive_participants')
+      .select('drive_id')
+      .eq('user_id', userId);
+
+    if (e2) return { data: created, error: null };
+
+    const joinedIds = (joinedRows || [])
+      .map((r: { drive_id: string }) => r.drive_id)
+      .filter((id: string) => !(created || []).some((d: any) => d.id === id));
+
+    if (joinedIds.length === 0) return { data: created, error: null };
+
+    const { data: joined, error: e3 } = await supabase
+      .from('drives')
+      .select(`*, participants:drive_participants(count)`)
+      .in('id', joinedIds)
+      .order('start_time', { ascending: true });
+
+    if (e3) return { data: created, error: null };
+
+    const merged = [...(created || []), ...(joined || [])].sort(
+      (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+    );
+    return { data: merged, error: null };
   },
   
   createDrive: async (driveData: any) => {
@@ -176,10 +196,7 @@ export const db = {
   getDriveParticipants: async (driveId: string) => {
     const { data, error } = await supabase
       .from('drive_participants')
-      .select(`
-        *,
-        user:profiles!drive_participants_user_id_fkey(*)
-      `)
+      .select('*')
       .eq('drive_id', driveId)
       .order('joined_at', { ascending: true });
     return { data, error };
@@ -307,15 +324,8 @@ export const chats = {
       .from('chats')
       .select(`
         *,
-        participants:chat_participants(
-          *,
-          user:profiles(*)
-        ),
-        last_message:messages(
-          content,
-          created_at,
-          sender:profiles(username)
-        )
+        participants:chat_participants(*),
+        last_message:messages(content, created_at)
       `)
       .order('updated_at', { ascending: false });
     return { data, error };
@@ -326,10 +336,7 @@ export const chats = {
       .from('chats')
       .select(`
         *,
-        participants:chat_participants(
-          *,
-          user:profiles(*)
-        )
+        participants:chat_participants(*)
       `)
       .eq('id', chatId)
       .single();
@@ -357,10 +364,7 @@ export const chats = {
   getChatParticipants: async (chatId: string) => {
     const { data, error } = await supabase
       .from('chat_participants')
-      .select(`
-        *,
-        user:profiles(*)
-      `)
+      .select('*')
       .eq('chat_id', chatId);
     return { data, error };
   },
@@ -371,10 +375,7 @@ export const messages = {
   getMessages: async (chatId: string, limit: number = 50) => {
     const { data, error } = await supabase
       .from('messages')
-      .select(`
-        *,
-        sender:profiles(*)
-      `)
+      .select('*')
       .eq('chat_id', chatId)
       .order('created_at', { ascending: false })
       .limit(limit);
@@ -385,10 +386,7 @@ export const messages = {
     const { data, error } = await supabase
       .from('messages')
       .insert([{ chat_id: chatId, sender_id: senderId, content }])
-      .select(`
-        *,
-        sender:profiles(*)
-      `)
+      .select('*')
       .single();
     
     // Update chat updated_at timestamp
