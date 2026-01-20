@@ -453,16 +453,18 @@ export default function ProfileScreen() {
               style={styles.vehicleCard}
               onPress={() => router.push(`/profile/vehicle/${vehicle.id}`)}
             >
-              <View style={styles.vehicleColorBadge}>
-                <Text style={styles.vehicleColorText}>{vehicle.color}</Text>
-              </View>
-              <View style={styles.vehicleImagePlaceholder}>
-                <FontAwesome name="car" size={32} color="#999" />
-              </View>
+              {vehicle.image_url ? (
+                <Image source={{ uri: storage.getPublicUrl('vehicles', vehicle.image_url) }} style={styles.vehicleImage} resizeMode="cover" />
+              ) : (
+                <View style={styles.vehicleImagePlaceholder}>
+                  <FontAwesome name="car" size={28} color="#999" />
+                </View>
+              )}
               <View style={styles.vehicleInfo}>
                 <Text style={styles.vehicleNickname}>{vehicle.nickname || 'Nickname'}</Text>
+                <Text style={styles.vehicleColor}>{vehicle.color || '—'}</Text>
                 <Text style={styles.vehicleName}>
-                  {vehicle.year} {vehicle.make} {vehicle.model} {vehicle.sub_model || vehicle.subModel}
+                  {vehicle.year} {vehicle.make} {vehicle.model}
                 </Text>
               </View>
             </Pressable>
@@ -733,24 +735,17 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    alignItems: 'flex-start',
+    gap: 14,
   },
-  vehicleColorBadge: {
-    backgroundColor: '#E0E0E0',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  vehicleColorText: {
-    fontSize: 12,
-    color: '#666',
+  vehicleImage: {
+    width: 88,
+    height: 72,
+    borderRadius: 8,
   },
   vehicleImagePlaceholder: {
-    width: 80,
-    height: 60,
+    width: 88,
+    height: 72,
     backgroundColor: '#E0E0E0',
     borderRadius: 8,
     justifyContent: 'center',
@@ -760,9 +755,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   vehicleNickname: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: '#000',
+    marginBottom: 4,
+  },
+  vehicleColor: {
+    fontSize: 13,
+    color: '#666',
     marginBottom: 4,
   },
   vehicleName: {

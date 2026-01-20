@@ -1,14 +1,16 @@
 import { Text } from '@/components/Themed';
-import { auth, vehicles } from '@/lib/supabase';
+import { auth, storage, vehicles } from '@/lib/supabase';
 import { FontAwesome } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AddVehicleScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
   const [subModel, setSubModel] = useState('');
@@ -16,6 +18,23 @@ export default function AddVehicleScreen() {
   const [color, setColor] = useState('');
   const [nickname, setNickname] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const pickCarPhoto = () => {
+    Alert.alert('Car photo', 'Choose an option', [
+      { text: 'Take Photo', onPress: () => pickImage('camera') },
+      { text: 'Choose from Library', onPress: () => pickImage('library') },
+      ...(photoUri ? [{ text: 'Remove', onPress: () => setPhotoUri(null) }] : []),
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const pickImage = async (source: 'camera' | 'library') => {
+    const opts = { mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [4, 3] as [number, number], quality: 0.8 };
+    const result = source === 'camera'
+      ? await ImagePicker.launchCameraAsync(opts)
+      : await ImagePicker.launchImageLibraryAsync(opts);
+    if (!result.canceled && result.assets[0]?.uri) setPhotoUri(result.assets[0].uri);
+  };
 
   const handleSave = async () => {
     // Validation
@@ -61,19 +80,25 @@ export default function AddVehicleScreen() {
       if (error) {
         console.error('Vehicle creation error:', error);
         let errorMessage = 'Failed to save vehicle';
-        
         if (error.code === '42501') {
           errorMessage = 'Database security policy error. Please run the vehicles table SQL in Supabase dashboard.';
+        } else if (error.code === 'PGRST204') {
+          errorMessage = "The vehicles table is missing columns (e.g. 'nickname'). Run supabase_add_vehicles_columns.sql in Supabase → SQL Editor, then try again.";
         } else if (error.message) {
           errorMessage = error.message;
         }
-        
         Alert.alert('Error', errorMessage);
         setLoading(false);
         return;
       }
 
-      // Success - navigate back
+      if (data && photoUri) {
+        const { path, error: upErr } = await storage.uploadVehicleImageFromUri(user.id, data.id, photoUri);
+        if (!upErr && path) {
+          await vehicles.updateVehicle(data.id, { image_url: path });
+        }
+      }
+
       Alert.alert('Success', 'Vehicle added successfully!', [
         { text: 'OK', onPress: () => router.back() },
       ]);
@@ -107,6 +132,20 @@ export default function AddVehicleScreen() {
         </View>
 
         <View style={styles.form}>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Car photo (Optional)</Text>
+            <Pressable style={styles.photoBox} onPress={pickCarPhoto} disabled={loading}>
+              {photoUri ? (
+                <Image source={{ uri: photoUri }} style={styles.photoImage} resizeMode="cover" />
+              ) : (
+                <View style={styles.photoPlaceholder}>
+                  <FontAwesome name="camera" size={32} color="#999" />
+                  <Text style={styles.photoPlaceholderText}>Tap to add photo</Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
+
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Nickname (Optional)</Text>
             <View style={styles.inputContainer}>
@@ -254,6 +293,28 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     marginBottom: 20,
+  },
+  photoBox: {
+    height: 160,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#F0F0F0',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  photoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  photoPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoPlaceholderText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#999',
   },
   label: {
     fontSize: 14,

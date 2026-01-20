@@ -1,7 +1,8 @@
 import { mapConfig } from '@/lib/mapbox';
 import { FontAwesome } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
+import RNMapView, { Marker, Polyline } from 'react-native-maps';
 
 // Gracefully handle Mapbox imports
 let Mapbox: any = null;
@@ -127,8 +128,34 @@ export default function MapView({
     }
   }, [markers, route, userLocation]);
 
-  // Show placeholder when: missing native Mapbox, no valid token, or not ready
-  if (!Mapbox || !MapboxMapView || !Camera || !isReady || !hasValidToken) {
+  const useMapbox = !!(Mapbox && MapboxMapView && Camera && isReady && hasValidToken);
+
+  // Fallback for Expo Go / when Mapbox native isn't available: use react-native-maps (works in Expo Go)
+  if (!useMapbox && (Platform.OS === 'ios' || Platform.OS === 'android')) {
+    const lat = center[1];
+    const lon = center[0];
+    const delta = 0.005 * Math.pow(2, 15 - (zoom || 12));
+    return (
+      <View style={[styles.container, style]}>
+        <RNMapView
+          style={styles.map}
+          initialRegion={{ latitude: lat, longitude: lon, latitudeDelta: delta, longitudeDelta: delta }}
+          onPress={(e) => onMapPress?.([e.nativeEvent.coordinate.longitude, e.nativeEvent.coordinate.latitude])}
+        >
+          {userLocation && <Marker coordinate={{ latitude: userLocation[1], longitude: userLocation[0] }} pinColor="#007AFF" title="You" />}
+          {markers.map((m) => (
+            <Marker key={m.id} coordinate={{ latitude: m.coordinates[1], longitude: m.coordinates[0] }} title={m.title} onCalloutPress={() => onMarkerPress?.(m.id)} />
+          ))}
+          {route && route.length > 0 && (
+            <Polyline coordinates={route.map(([lng, lat]) => ({ latitude: lat, longitude: lng }))} strokeColor="#007AFF" strokeWidth={4} />
+          )}
+        </RNMapView>
+      </View>
+    );
+  }
+
+  // Web or no map library: placeholder
+  if (!useMapbox) {
     const isTokenIssue = Mapbox && MapboxMapView && Camera && !hasValidToken;
     return (
       <View style={[styles.container, style, { backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center' }]}>
@@ -137,15 +164,13 @@ export default function MapView({
           {isTokenIssue ? 'Mapbox token required' : 'Map requires native build'}
         </Text>
         <Text style={{ color: '#666', textAlign: 'center', marginTop: 8, fontSize: 12, paddingHorizontal: 40 }}>
-          {isTokenIssue
-            ? 'Add EXPO_PUBLIC_MAPBOX_TOKEN (pk.…) to .env and restart Metro.'
-            : 'Run: npx expo run:ios or npx expo run:android'}
+          {isTokenIssue ? 'Add EXPO_PUBLIC_MAPBOX_TOKEN (pk.…) to .env and restart Metro.' : 'Use Expo Go on your phone or run: npx expo run:ios / run:android'}
         </Text>
       </View>
     );
   }
 
-  // Create route geometry for ShapeSource
+  // Create route geometry for ShapeSource (Mapbox path)
   const routeGeometry = route && route.length > 0 ? {
     type: 'LineString' as const,
     coordinates: route,
