@@ -16,7 +16,7 @@ try {
 
 // Map configuration
 export const mapConfig = {
-  styleURL: Mapbox?.StyleURL?.Street || 'mapbox://styles/mapbox/streets-v12', // Can be changed to Mapbox.StyleURL.Satellite, etc.
+  styleURL: 'mapbox://styles/rileysims/cmhlhg0v300hi01r86vj4437q',
   zoomLevel: 10,
   centerCoordinate: [-122.4194, 37.7749], // Default to San Francisco, update as needed
 };
